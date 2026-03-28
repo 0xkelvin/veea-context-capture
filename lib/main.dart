@@ -266,12 +266,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    super.dispose();
-  }
-
   Future<void> _shareSelected() async {
     final pathsToShare = _selectedPaths.isNotEmpty
         ? _selectedPaths.toList()
