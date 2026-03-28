@@ -122,13 +122,14 @@ class SampleHandler: RPBroadcastSampleHandler {
         if currentTime - lastCaptureTime < interval {
             return
         }
-        
-        // BUG FIX: Reset the timer *before* the visual check, so that if the 
-        // screen is static, we don't recalculate the diff 60 times a second!
-        lastCaptureTime = currentTime
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // BUG FIX: Reset the timer *before* the visual check, so that if the 
+        // screen is static, we don't recalculate the diff 60 times a second!
+        // (Moved after pixelBuffer guard so we don't throttle due to a dropped/corrupted ReplayKit frame)
+        lastCaptureTime = currentTime
 
         // Change detection: compare a tiny 16×16 thumbnail of the current frame
         // against the last saved frame.  Skip the capture if the perceptual
