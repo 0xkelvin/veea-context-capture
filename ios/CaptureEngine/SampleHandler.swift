@@ -122,6 +122,10 @@ class SampleHandler: RPBroadcastSampleHandler {
         if currentTime - lastCaptureTime < interval {
             return
         }
+        
+        // BUG FIX: Reset the timer *before* the visual check, so that if the 
+        // screen is static, we don't recalculate the diff 60 times a second!
+        lastCaptureTime = currentTime
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
@@ -140,8 +144,6 @@ class SampleHandler: RPBroadcastSampleHandler {
             }
             lastSavedThumbBytes = thumbBytes
         }
-
-        lastCaptureTime = currentTime
 
         // Downscale to 480p approx. Cap at 1.0 so we never upscale frames that
         // are already shorter than 480 pixels.
