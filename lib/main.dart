@@ -64,6 +64,24 @@ class BridgeService {
       debugPrint("Bridge launchCapture Error: $e");
     }
   }
+
+  static Future<void> setSensitivity(double sensitivity) async {
+    try {
+      await _channel.invokeMethod('setSetting', {'key': 'capture_sensitivity', 'value': sensitivity});
+    } catch (e) {
+      debugPrint("Bridge setSensitivity Error: $e");
+    }
+  }
+
+  static Future<double> getSensitivity() async {
+    try {
+      final res = await _channel.invokeMethod('getSetting', {'key': 'capture_sensitivity'});
+      return (res as num?)?.toDouble() ?? 0.03;
+    } catch (e) {
+      debugPrint("Bridge getSensitivity Error: $e");
+      return 0.03;
+    }
+  }
 }
 
 class VeeaContextApp extends StatelessWidget {
@@ -104,6 +122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _pollingTimer;
   double _currentFPS = 1.0;
   int _maxFrames = 300;
+  // Change sensitivity threshold stored as a percentage (1–20 %).
+  // The native layer expects a fraction (0.01–0.20); conversion is done at
+  // the bridge call sites to avoid repeated round-trip precision loss.
+  double _sensitivityPct = 3.0; // default 3 %
   final Set<String> _selectedPaths = {};
 
   @override
@@ -116,10 +138,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final path = await BridgeService.getSharedDirectory();
     final fps = await BridgeService.getFPS();
     final maxF = await BridgeService.getMaxFrames();
+    final sensitivity = await BridgeService.getSensitivity();
     setState(() {
       _sharedDirPath = path;
       _currentFPS = fps;
       _maxFrames = maxF;
+      _sensitivityPct = (sensitivity * 100).roundToDouble().clamp(1, 20);
     });
 
     if (_sharedDirPath != null) {
@@ -274,7 +298,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   const Icon(Icons.speed, color: Colors.white70),
                   const SizedBox(width: 12),
-                  const Text("Capture Rate", style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text("Max Capture Rate", style: TextStyle(fontWeight: FontWeight.w600)),
                   const Spacer(),
                   DropdownButton<double>(
                     value: _currentFPS,
@@ -290,6 +314,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     },
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.tune, color: Colors.white70),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      "Change Sensitivity",
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Text(
+                    "${_sensitivityPct.round()}%",
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                  ),
+                ],
+              ),
+              Slider(
+                value: _sensitivityPct.clamp(1, 20),
+                min: 1,
+                max: 20,
+                divisions: 19,
+                activeColor: Theme.of(context).colorScheme.secondary,
+                inactiveColor: Colors.white24,
+                onChanged: (val) {
+                  setState(() => _sensitivityPct = val);
+                },
+                onChangeEnd: (val) {
+                  BridgeService.setSensitivity(val / 100);
+                },
+              ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Sensitive", style: TextStyle(fontSize: 11, color: Colors.white38)),
+                    Text("Major changes only", style: TextStyle(fontSize: 11, color: Colors.white38)),
+                  ],
+                ),
               ),
               const SizedBox(height: 8),
               Row(
