@@ -21,10 +21,20 @@ class SampleHandler: RPBroadcastSampleHandler {
 
     // Snapshots folder URL computed once and cached for the lifetime of the
     // extension – avoids repeated FileManager.containerURL calls per frame.
-    private lazy var cachedSnapshotsFolderURL: URL? = {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
-            .appendingPathComponent(snapshotsFolder)
-    }()
+    // Only successful resolutions are cached; failures are retried on subsequent access
+    // so that transient App Group issues don't permanently disable snapshot saving.
+    private var snapshotsFolderURLCache: URL?
+    private var cachedSnapshotsFolderURL: URL? {
+        if let url = snapshotsFolderURLCache {
+            return url
+        }
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
+            return nil
+        }
+        let snapshotsURL = containerURL.appendingPathComponent(snapshotsFolder)
+        snapshotsFolderURLCache = snapshotsURL
+        return snapshotsURL
+    }
 
     // Cached settings – re-read from UserDefaults at most once every 2 seconds
     // to avoid expensive I/O on every incoming video frame.
