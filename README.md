@@ -20,8 +20,10 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 - **[Completed]** Implement `ReplayKit` Broadcast Upload Extension to capture screen content across all applications.
 - **[Completed]** Maintain persistence while the host app is in the background.
 
-### FR-2: Frame Throttling & Optimization
-- **[Completed]** **Sampling Rate:** Throttle capture configurable between **0.1 FPS and 5.0 FPS** directly from the Flutter Dashboard.
+### FR-2: Adaptive Frame Capture & Optimization
+- **[Completed]** **Max Capture Rate:** Configurable upper-bound FPS (**0.1–5.0 FPS**) set directly from the Flutter Dashboard. Acts as a burst-prevention throttle.
+- **[Completed]** **Content-Change Detection:** Each eligible frame is compared against the last saved frame using a **perceptual luma difference** on a 16×16 thumbnail. Frames are skipped when the screen has not changed meaningfully (e.g. user is idle on a chat), eliminating redundant storage writes.
+- **[Completed]** **Configurable Sensitivity:** A **Change Sensitivity** slider (1–20%, default 3%) in the Flutter UI lets users tune how much visual change is required to trigger a save — low values capture subtle changes; high values capture only major screen transitions.
 - **[Completed]** **Resolution:** Downscale 1080p frames to **~480p** immediately upon capture.
 - **[Completed]** **Format:** Save frames as **HEIC** using `CIContext.heifRepresentation(...)` directly from the PixelBuffer to minimize disk I/O and memory.
 
@@ -59,7 +61,9 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 ### Phase 2: Capture Engine (Native) (✅ Completed)
 - Develop the `SampleHandler.swift` logic:
   - Frame interception.
-  - Sub-framerate Throttling (reading `Double` from UserDefaults).
+  - **Two-gate adaptive capture:**
+    - **Gate 1 – Max Rate:** FPS-based throttle (0.1–5.0 FPS) caps the burst capture rate.
+    - **Gate 2 – Visual Diff:** 16×16 perceptual-luma thumbnail diff skips redundant frames when screen is unchanged.
   - Memory-efficient resizing to 480p.
   - Writing to the shared container.
   - Sub-process Background Janitor to delete old images automatically.
@@ -78,6 +82,11 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 - **App Group ID:** `group.ai.bluleap.veea`
 - **File Naming:** `snapshot_YYYYMMDD_HHMMSS.heic`
 - **Memory Management:** Avoid `UIImage` conversions in the extension; process `CVPixelBuffer` directly to stay under the 50MB limit.
+- **Change Detection:** A 16×16 RGBA8 thumbnail (~1 KB) of the last saved frame is kept in memory. The perceptual-luma mean absolute difference (MAD) is computed in ~256 integer operations per candidate frame — negligible CPU cost.
+- **UserDefaults Keys:**
+  - `capture_fps` — max capture rate (Double, 0.1–5.0)
+  - `max_frames` — circular buffer size (Int, 30–10,000)
+  - `capture_sensitivity` — change threshold as a fraction (Double, 0.01–0.20; default 0.03)
 
 ---
 
