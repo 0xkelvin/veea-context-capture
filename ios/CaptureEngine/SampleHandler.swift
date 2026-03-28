@@ -136,6 +136,11 @@ class SampleHandler: RPBroadcastSampleHandler {
         // difference is below the configured sensitivity threshold so that we
         // don't write redundant frames while the screen is static (e.g. user
         // is reading a chat without scrolling).
+        // NOTE: newThumbBytes is intentionally NOT committed to lastSavedThumbBytes
+        // here.  It is only written after the disk write succeeds so that if
+        // HEIC encoding or the file write fails the reference thumbnail is not
+        // overwritten and the system can retry on the next similar frame.
+        let newThumbBytes: [UInt8]?
         if let thumbBytes = extractThumbBytes(from: ciImage) {
             if let prevBytes = lastSavedThumbBytes {
                 let diff = frameDifference(prev: prevBytes, curr: thumbBytes)
@@ -143,7 +148,9 @@ class SampleHandler: RPBroadcastSampleHandler {
                     return  // Not enough change – skip this frame
                 }
             }
-            lastSavedThumbBytes = thumbBytes
+            newThumbBytes = thumbBytes
+        } else {
+            newThumbBytes = nil
         }
 
         // Downscale to 480p approx. Cap at 1.0 so we never upscale frames that
@@ -158,7 +165,12 @@ class SampleHandler: RPBroadcastSampleHandler {
             return
         }
 
-        saveSnapshot(data: heicData)
+        if saveSnapshot(data: heicData) {
+            // Only update the reference thumbnail after a confirmed disk write so
+            // that a failed HEIC encode or write does not permanently suppress
+            // retry attempts for visually-similar frames.
+            lastSavedThumbBytes = newThumbBytes
+        }
         runJanitor()
     }
     
@@ -169,16 +181,19 @@ class SampleHandler: RPBroadcastSampleHandler {
         return container?.appendingPathComponent(snapshotsFolder)
     }
     
-    private func saveSnapshot(data: Data) {
-        guard let folder = getSnapshotsFolder() else { return }
+    @discardableResult
+    private func saveSnapshot(data: Data) -> Bool {
+        guard let folder = getSnapshotsFolder() else { return false }
         
         let filename = "snapshot_\(dateFormatter.string(from: Date())).heic"
         let fileURL = folder.appendingPathComponent(filename)
         
         do {
             try data.write(to: fileURL, options: .atomic)
+            return true
         } catch {
             print("Failed to write snapshot: \(error)")
+            return false
         }
     }
     
