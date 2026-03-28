@@ -22,30 +22,52 @@ class BridgeService {
   }
 
   static Future<void> setFPS(double fps) async {
-    await _channel.invokeMethod('setSetting', {'key': 'capture_fps', 'value': fps});
+    try {
+      await _channel.invokeMethod('setSetting', {'key': 'capture_fps', 'value': fps});
+    } catch (e) {
+      debugPrint("Bridge setFPS Error: $e");
+    }
   }
 
   static Future<double> getFPS() async {
-    final res = await _channel.invokeMethod('getSetting', {'key': 'capture_fps'});
-    return (res as num?)?.toDouble() ?? 1.0;
+    try {
+      final res = await _channel.invokeMethod('getSetting', {'key': 'capture_fps'});
+      return (res as num?)?.toDouble() ?? 1.0;
+    } catch (e) {
+      debugPrint("Bridge getFPS Error: $e");
+      return 1.0;
+    }
   }
 
   static Future<void> setMaxFrames(int max) async {
-    await _channel.invokeMethod('setSetting', {'key': 'max_frames', 'value': max});
+    try {
+      await _channel.invokeMethod('setSetting', {'key': 'max_frames', 'value': max});
+    } catch (e) {
+      debugPrint("Bridge setMaxFrames Error: $e");
+    }
   }
 
   static Future<int> getMaxFrames() async {
-    final res = await _channel.invokeMethod('getSetting', {'key': 'max_frames'});
-    return res as int? ?? 300;
+    try {
+      final res = await _channel.invokeMethod('getSetting', {'key': 'max_frames'});
+      return res as int? ?? 300;
+    } catch (e) {
+      debugPrint("Bridge getMaxFrames Error: $e");
+      return 300;
+    }
   }
 
   static Future<void> launchCapture() async {
-    await _channel.invokeMethod('launchCapture');
+    try {
+      await _channel.invokeMethod('launchCapture');
+    } catch (e) {
+      debugPrint("Bridge launchCapture Error: $e");
+    }
   }
 }
 
 class VeeaContextApp extends StatelessWidget {
-  const VeeaContextApp({Key? key}) : super(key: key);
+  const VeeaContextApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +92,7 @@ class VeeaContextApp extends StatelessWidget {
 }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -160,8 +182,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     setState(() {
       _selectedPaths.clear();
-      _loadSnapshots();
     });
+    _loadSnapshots();
   }
 
   void _toggleSelectAll() {
@@ -186,8 +208,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               width: 300, height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
-                boxShadow: [BoxShadow(blurRadius: 100, spreadRadius: 50, color: Theme.of(context).colorScheme.primary.withOpacity(0.5))],
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                boxShadow: [BoxShadow(blurRadius: 100, spreadRadius: 50, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5))],
               ),
             ),
           ),
@@ -197,8 +219,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               width: 250, height: 250,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Theme.of(context).colorScheme.secondary.withOpacity(0.3),
-                boxShadow: [BoxShadow(blurRadius: 100, spreadRadius: 50, color: Theme.of(context).colorScheme.secondary.withOpacity(0.4))],
+                color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.3),
+                boxShadow: [BoxShadow(blurRadius: 100, spreadRadius: 50, color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.4))],
               ),
             ),
           ),
@@ -377,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           width: isSelected || isLatest ? 3 : 0,
                         ),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 10, offset: const Offset(0, 5)),
+                          BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, 5)),
                         ],
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -425,7 +447,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         width: mini ? 50 : 200,
         height: 50,
         decoration: BoxDecoration(
-          color: !mini ? Theme.of(context).colorScheme.surface.withOpacity(0.8) : Colors.transparent,
+          color: !mini ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.8) : Colors.transparent,
           borderRadius: BorderRadius.circular(25),
           border: mini ? Border.all(color: Colors.white12) : null,
         ),
@@ -446,7 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 class GlassMorphCard extends StatelessWidget {
   final Widget child;
-  const GlassMorphCard({Key? key, required this.child}) : super(key: key);
+  const GlassMorphCard({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -456,9 +478,9 @@ class GlassMorphCard extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: child,
         ),

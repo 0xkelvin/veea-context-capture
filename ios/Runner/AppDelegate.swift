@@ -28,7 +28,6 @@ import ReplayKit
              let value = args["value"] {
               let defaults = UserDefaults(suiteName: "group.ai.bluleap.veea")
               defaults?.set(value, forKey: key)
-              defaults?.synchronize()
               result(true)
           } else {
               result(FlutterError(code: "INVALID_ARGS", message: "Invalid arguments", details: nil))
