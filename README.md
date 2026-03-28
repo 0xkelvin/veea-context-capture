@@ -1,5 +1,3 @@
-# veea-context-capture
-
 # Veea iOS Context Capture (Vision Bridge)
 
 ## 1. Project Overview
@@ -29,7 +27,7 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 - Write snapshots to a dedicated directory within the **Shared App Group Container**.
 - Utilize a **Circular Buffer** logic (e.g., keeping only the last 10–50 frames) to prevent storage bloat.
 
-### FR-4: Manual Export (The "User Way")
+### FR-4: Manual Export
 - Provide a "Share Context" button in the Flutter UI.
 - Integrate the `share_plus` package to allow manual export of snapshots via the native iOS Share Sheet (AirDrop, Email, etc.).
 
@@ -49,7 +47,7 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 
 ---
 
-## 5. Proposed Roadmap for Antigravity
+## 5. Development Roadmap
 
 ### Phase 1: Infrastructure
 - Configure Apple Developer Portal with `App Group IDs`.
@@ -79,4 +77,58 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 
 ---
 
-&copy; 2026 bluleap.ai / Veea Project
+## 7. Prerequisites
+
+Before building this project, ensure you have the following installed and configured:
+
+| Requirement | Version / Notes |
+| :--- | :--- |
+| **Xcode** | 15.0 or later |
+| **Flutter SDK** | 3.x or later |
+| **Apple Developer Account** | Required to create App Group IDs and provision devices |
+| **iOS Device / Simulator** | iOS 16.0 or later (ReplayKit Broadcast Extension requires a real device for full testing) |
+| **CocoaPods** *(if used)* | Latest stable release |
+
+---
+
+## 8. Getting Started
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/0xkelvin/veea-context-capture.git
+cd veea-context-capture
+
+# 2. Install Flutter dependencies
+flutter pub get
+
+# 3. Open the Xcode workspace (required to configure the Broadcast Extension target)
+open ios/Runner.xcworkspace
+```
+
+Once in Xcode:
+
+1. Select the **Runner** target → **Signing & Capabilities** → add the `App Groups` entitlement and set the group ID to `group.ai.bluleap.veea`.
+2. Repeat for the **Broadcast Upload Extension** target.
+3. Build and run on a physical iOS device (`ReplayKit` screen recording is unavailable in the simulator).
+
+---
+
+## 9. Contributing
+
+Contributions, issues, and feature requests are welcome.
+
+1. Fork the repository and create your branch: `git checkout -b feat/my-feature`.
+2. Commit your changes following [Conventional Commits](https://www.conventionalcommits.org/).
+3. Open a Pull Request describing your changes and referencing any related issues.
+
+Please search existing issues before opening a new one to avoid duplicates.
+
+---
+
+## 10. License
+
+This project is proprietary software. All rights reserved by bluleap.ai unless otherwise stated. See the copyright notice below.
+
+---
+
+© 2026 bluleap.ai / Veea Project
