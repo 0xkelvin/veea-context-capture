@@ -146,6 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final fps = await BridgeService.getFPS();
     final maxF = await BridgeService.getMaxFrames();
     final sensitivity = await BridgeService.getSensitivity();
+    if (!mounted) return;
     setState(() {
       _sharedDirPath = path;
       _currentFPS = fps;
@@ -155,6 +156,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_sharedDirPath != null) {
       await _loadSnapshots();
+      if (!mounted) return;
       _schedulePoll();
     }
   }
