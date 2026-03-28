@@ -119,6 +119,12 @@ class SampleHandler: RPBroadcastSampleHandler {
     }()
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
+        // Persist intent flags so the host app can auto-restart after a screen lock.
+        let defaults = UserDefaults(suiteName: appGroupID)
+        defaults?.set(true, forKey: "capture_wants_active")
+        defaults?.set(true, forKey: "capture_is_running")
+        defaults?.synchronize()
+
         // Setup initial folder
         if let sharedFolder = getSnapshotsFolder() {
             if !FileManager.default.fileExists(atPath: sharedFolder.path) {
@@ -129,7 +135,16 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     override func broadcastPaused() { }
     override func broadcastResumed() { }
-    override func broadcastFinished() { }
+
+    override func broadcastFinished() {
+        // Mark the broadcast as no longer running.
+        // capture_wants_active is intentionally left unchanged here so that a
+        // screen-lock-induced termination does not prevent the host app from
+        // auto-restarting capture when the screen is unlocked again.
+        let defaults = UserDefaults(suiteName: appGroupID)
+        defaults?.set(false, forKey: "capture_is_running")
+        defaults?.synchronize()
+    }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
