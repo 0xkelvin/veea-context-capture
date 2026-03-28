@@ -153,24 +153,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _loadSnapshots() {
+  Future<void> _loadSnapshots() async {
     if (_sharedDirPath == null) return;
     final dir = Directory(_sharedDirPath!);
-    if (!dir.existsSync()) return;
+    try {
+      if (!await dir.exists()) return;
 
-    final files = dir.listSync().whereType<File>().where((f) => f.existsSync()).toList();
-    files.sort((a, b) {
-      try {
-        if (!a.existsSync() || !b.existsSync()) return 0;
-        return b.lastModifiedSync().compareTo(a.lastModifiedSync()); // Newest first
-      } catch (_) {
-        return 0;
-      }
-    });
+      // Collect all File entries without blocking the UI thread.
+      final files = await dir
+          .list()
+          .whereType<File>()
+          .toList();
 
-    setState(() {
-      _snapshots = files;
-    });
+      if (!mounted) return;
+
+      // Sort newest-first by filename.  Because files are named
+      // snapshot_YYYYMMDD_HHMMSS_SSS.heic the lexicographic order equals the
+      // chronological order, so no stat() call is needed.
+      files.sort((a, b) => b.path.compareTo(a.path));
+
+      setState(() {
+        _snapshots = files;
+      });
+    } catch (e) {
+      debugPrint('_loadSnapshots error: $e');
+    }
   }
 
   @override
@@ -471,7 +478,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          Image.file(file, fit: BoxFit.cover, gaplessPlayback: true),
+                          Image.file(file, fit: BoxFit.cover, gaplessPlayback: true, cacheWidth: 480),
                           if (isSelected)
                             Container(
                               color: Colors.black45,

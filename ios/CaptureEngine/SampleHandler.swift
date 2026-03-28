@@ -13,6 +13,19 @@ class SampleHandler: RPBroadcastSampleHandler {
     // Throttling state
     private var lastCaptureTime: TimeInterval = 0
 
+    // Janitor throttle – run at most once every 5 seconds so we don't scan the
+    // directory on every single frame save (which could be 5+ times per second).
+    // Initialised to -janitorInterval so the janitor always runs on first invocation.
+    private var janitorLastRunTime: TimeInterval = -5.0
+    private let janitorInterval: TimeInterval = 5.0
+
+    // Snapshots folder URL computed once and cached for the lifetime of the
+    // extension – avoids repeated FileManager.containerURL calls per frame.
+    private lazy var cachedSnapshotsFolderURL: URL? = {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)?
+            .appendingPathComponent(snapshotsFolder)
+    }()
+
     // Cached settings – re-read from UserDefaults at most once every 2 seconds
     // to avoid expensive I/O on every incoming video frame.
     // Note: RPBroadcastSampleHandler guarantees that processSampleBuffer is called
@@ -163,10 +176,9 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     // MARK: - File Management
-    
+
     private func getSnapshotsFolder() -> URL? {
-        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID)
-        return container?.appendingPathComponent(snapshotsFolder)
+        return cachedSnapshotsFolderURL
     }
     
     private func saveSnapshot(data: Data) {
@@ -183,26 +195,34 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
     
     private func runJanitor() {
+        // Throttle: do not scan the directory more than once every janitorInterval
+        // seconds (5 s by default).  At 5 FPS this prevents 5 full directory scans
+        // per second from degrading capture performance.
+        let now = CACurrentMediaTime()
+        guard now - janitorLastRunTime >= janitorInterval else { return }
+        janitorLastRunTime = now
+
         guard let folder = getSnapshotsFolder() else { return }
-        
+
         do {
-            let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
-            
+            // No resource keys needed – filenames already encode the timestamp
+            // (snapshot_YYYYMMDD_HHMMSS_SSS.heic), so a simple lexicographic sort
+            // is equivalent to creation-date order and much cheaper.
+            let files = try FileManager.default.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)
+
             if files.count <= cachedMaxFrames { return }
-            
-            // Sort by creation date (oldest first)
-            let sortedFiles = try files.sorted {
-                let date1 = try $0.resourceValues(forKeys: [.creationDateKey]).creationDate ?? Date.distantPast
-                let date2 = try $1.resourceValues(forKeys: [.creationDateKey]).creationDate ?? Date.distantPast
-                return date1 < date2
-            }
-            
+
+            // Sort oldest-first by filename (lexicographic order equals
+            // chronological order because of the timestamp-based naming scheme).
+            let sortedFiles = files.sorted { $0.lastPathComponent < $1.lastPathComponent }
+
             // Delete excess older files
             let excessCount = files.count - cachedMaxFrames
             for i in 0..<excessCount {
                 try FileManager.default.removeItem(at: sortedFiles[i])
             }
-            
+
         } catch {
             print("Janitor failed: \(error)")
         }
