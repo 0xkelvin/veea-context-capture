@@ -154,7 +154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     if (_sharedDirPath != null) {
-      _loadSnapshots();
+      await _loadSnapshots();
       _schedulePoll();
     }
   }
@@ -236,7 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  void _deleteSelected() {
+  Future<void> _deleteSelected() async {
     if (_selectedPaths.isEmpty) return;
     for (final path in _selectedPaths) {
       final file = File(path);
@@ -249,7 +249,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       _selectedPaths.clear();
     });
-    _loadSnapshots();
+    await _loadSnapshots();
   }
 
   void _toggleSelectAll() {

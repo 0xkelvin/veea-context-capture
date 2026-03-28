@@ -16,8 +16,8 @@ class SampleHandler: RPBroadcastSampleHandler {
     // Janitor throttle – run at most once every 5 seconds so we don't scan the
     // directory on every single frame save (which could be 5+ times per second).
     // Initialised to -janitorInterval so the janitor always runs on first invocation.
-    private var janitorLastRunTime: TimeInterval = -5.0
     private let janitorInterval: TimeInterval = 5.0
+    private lazy var janitorLastRunTime: TimeInterval = -janitorInterval
 
     // Snapshots folder URL computed once and cached for the lifetime of the
     // extension – avoids repeated FileManager.containerURL calls per frame.
