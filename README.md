@@ -17,57 +17,59 @@ The application employs a **Dual-Process Hybrid Architecture** to satisfy iOS ba
 ## 3. Functional Requirements (FR)
 
 ### FR-1: System-Wide Capture
-- Implement `ReplayKit` Broadcast Upload Extension to capture screen content across all applications.
-- Maintain persistence while the host app is in the background.
+- **[Completed]** Implement `ReplayKit` Broadcast Upload Extension to capture screen content across all applications.
+- **[Completed]** Maintain persistence while the host app is in the background.
 
 ### FR-2: Frame Throttling & Optimization
-- **Sampling Rate:** Throttle capture to **1 Frame Per Second (FPS)** or less (configurable).
-- **Resolution:** Downscale 1080p frames to **480p/360p** immediately upon capture.
-- **Format:** Save frames as **HEIC** (preferred) or high-compression **JPEG** to minimize disk I/O and memory.
+- **[Completed]** **Sampling Rate:** Throttle capture configurable between **0.1 FPS and 5.0 FPS** directly from the Flutter Dashboard.
+- **[Completed]** **Resolution:** Downscale 1080p frames to **~480p** immediately upon capture.
+- **[Completed]** **Format:** Save frames as **HEIC** using `CIContext.heifRepresentation(...)` directly from the PixelBuffer to minimize disk I/O and memory.
 
 ### FR-3: Shared Data Pipeline
-- Write snapshots to a dedicated directory within the **Shared App Group Container**.
-- Utilize a **Circular Buffer** logic (e.g., keeping only the last 10–50 frames) to prevent storage bloat.
+- **[Completed]** Write snapshots to a dedicated directory within the **Shared App Group Container**.
+- **[Completed]** Utilize a **Circular Buffer Background Janitor** in Swift. Max storage is completely configurable via the Flutter UI (slider from **30 up to 10,000 frames**).
 
-### FR-4: Manual Export (The "User Way")
-- Provide a "Share Context" button in the Flutter UI.
-- Integrate the `share_plus` package to allow manual export of snapshots via the native iOS Share Sheet (AirDrop, Email, etc.).
+### FR-4: UI Management (Export & Delete)
+- **[Completed]** Provide a multi-selection state in Flutter to select precise frames.
+- **[Completed]** Utilize the `share_plus` package for exporting natively via the iOS Share Sheet.
+- **[Completed]** Provide a native UI Delete function to selectively prune physical files from the App Group.
 
 ### FR-5: Live Dashboard Preview
-- Implement a real-time "Current View" widget in Flutter that auto-refreshes when a new snapshot is detected in the shared container.
+- **[Completed]** Implement a real-time, sleek dashboard widget in Flutter that auto-refreshes using polling when new snapshots arrive.
 
 ---
 
 ## 4. Technical Constraints (The "50MB Wall")
 
-| Constraint | Requirement |
-| :--- | :--- |
-| **RAM Limit** | The Broadcast Extension **must** stay under **50MB**. Exceeding this triggers a "Jetsam" kill by iOS. |
-| **Processing** | Resizing must use the **Accelerate** or **Vision** framework for zero-copy memory efficiency. |
-| **Privacy** | The system utilizes the standard iOS "Red Recording Bar" as a required transparency feature. |
-| **Connectivity** | Local-first storage; no cloud upload occurs without explicit user action. |
+| Constraint | Status | Requirement |
+| :--- | :--- | :--- |
+| **RAM Limit** | ✅ Successfully Mitigated | The Broadcast Extension **must** stay under **50MB**. Exceeding this triggers a "Jetsam" kill by iOS. |
+| **Processing** | ✅ Implemented via CoreImage | Resizing uses `CIImage` and `CIContext` to avoid `UIImage` allocations for zero-copy memory efficiency. |
+| **Privacy** | ✅ Native Implementation | The system utilizes the standard iOS "Red Recording Bar" alongside `RPSystemBroadcastPickerView`. |
+| **Connectivity** | ✅ Local App Group | Local-first storage; no cloud upload occurs without explicit user action. |
 
 ---
 
-## 5. Proposed Roadmap for Antigravity
+## 5. Development Roadmap 
 
-### Phase 1: Infrastructure
+### Phase 1: Infrastructure (✅ Completed)
 - Configure Apple Developer Portal with `App Group IDs`.
 - Establish the Flutter host project and link the `Broadcast Upload Extension` target in Xcode.
 
-### Phase 2: Capture Engine (Native)
+### Phase 2: Capture Engine (Native) (✅ Completed)
 - Develop the `SampleHandler.swift` logic:
   - Frame interception.
-  - Throttling (dropping 59/60 frames).
+  - Sub-framerate Throttling (reading `Double` from UserDefaults).
   - Memory-efficient resizing to 480p.
   - Writing to the shared container.
+  - Sub-process Background Janitor to delete old images automatically.
 
-### Phase 3: Data Integration (Flutter)
-- Implement `AppGroupDirectory` access.
-- Build the "Snapshot Gallery" and "Share Sheet" triggers.
-- Add a "Janitor" service to clean up old images in the shared folder.
+### Phase 3: Data Integration (Flutter) (✅ Completed)
+- Implement `MethodChannel` Bridge access for `getSharedDir` and settings management.
+- Build the "Snapshot Gallery" and "Share Sheet/Trash" triggers.
+- Wrap the iOS `RPSystemBroadcastPickerView` trigger cleanly into the Dart layer.
 
-### Phase 4: AI Agent Integration
+### Phase 4: AI Agent Integration (In Progress / Future)
 - Expose the shared folder via a local **MCP (Model Context Protocol)** server for third-party AI agents.
 
 ---
