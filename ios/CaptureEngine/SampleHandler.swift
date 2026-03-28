@@ -12,18 +12,36 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     // Throttling state
     private var lastCaptureTime: TimeInterval = 0
-    private var TargetFPS: Double {
+
+    // Cached settings – re-read from UserDefaults at most once every 2 seconds
+    // to avoid expensive I/O on every incoming video frame.
+    // Note: RPBroadcastSampleHandler guarantees that processSampleBuffer is called
+    // serially on a single background thread, so these fields do not require
+    // additional synchronization.
+    private var cachedFPS: Double = 1.0
+    private var cachedMaxFrames: Int = 300
+    private var settingsLastReadTime: TimeInterval = 0
+    private let settingsCacheInterval: TimeInterval = 2.0
+
+    private func refreshSettingsIfNeeded() {
+        let now = CACurrentMediaTime()
+        guard now - settingsLastReadTime >= settingsCacheInterval else { return }
+        settingsLastReadTime = now
         let defaults = UserDefaults(suiteName: appGroupID)
         let fps = defaults?.double(forKey: "capture_fps") ?? 0
-        return fps > 0 ? fps : 1.0
-    }
-    
-    // Janitor state
-    private var MaxFrames: Int {
-        let defaults = UserDefaults(suiteName: appGroupID)
+        cachedFPS = fps > 0 ? fps : 1.0
         let max = defaults?.integer(forKey: "max_frames") ?? 0
-        return max > 0 ? max : 300 // Expanded default to 300 frames
+        cachedMaxFrames = max > 0 ? max : 300
     }
+
+    // Date formatter initialised once – DateFormatter is expensive to create.
+    // The en_US_POSIX locale ensures the format is not affected by device locale.
+    private lazy var dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyyMMdd_HHmmss_SSS"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
 
     override func broadcastStarted(withSetupInfo setupInfo: [String : NSObject]?) {
         // Setup initial folder
@@ -40,9 +58,11 @@ class SampleHandler: RPBroadcastSampleHandler {
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
-        
+
+        refreshSettingsIfNeeded()
+
         let currentTime = CACurrentMediaTime()
-        let interval = 1.0 / TargetFPS
+        let interval = 1.0 / cachedFPS
         
         // Throttling: If we haven't reached the next interval, drop the frame
         if currentTime - lastCaptureTime < interval {
@@ -56,8 +76,9 @@ class SampleHandler: RPBroadcastSampleHandler {
         
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         
-        // Downscale to 480p approx
-        let scale = 480.0 / ciImage.extent.height
+        // Downscale to 480p approx. Cap at 1.0 so we never upscale frames that
+        // are already shorter than 480 pixels.
+        let scale = min(1.0, 480.0 / ciImage.extent.height)
         let scaledImage = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         
         guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) else { return }
@@ -81,9 +102,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     private func saveSnapshot(data: Data) {
         guard let folder = getSnapshotsFolder() else { return }
         
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss_SSS"
-        let filename = "snapshot_\(formatter.string(from: Date())).heic"
+        let filename = "snapshot_\(dateFormatter.string(from: Date())).heic"
         let fileURL = folder.appendingPathComponent(filename)
         
         do {
@@ -99,7 +118,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         do {
             let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)
             
-            if files.count <= MaxFrames { return }
+            if files.count <= cachedMaxFrames { return }
             
             // Sort by creation date (oldest first)
             let sortedFiles = try files.sorted {
@@ -109,7 +128,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             }
             
             // Delete excess older files
-            let excessCount = files.count - MaxFrames
+            let excessCount = files.count - cachedMaxFrames
             for i in 0..<excessCount {
                 try FileManager.default.removeItem(at: sortedFiles[i])
             }
