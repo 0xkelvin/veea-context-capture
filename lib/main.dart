@@ -128,6 +128,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _sensitivityPct = 3.0; // default 3 %
   final Set<String> _selectedPaths = {};
 
+  // Adaptive polling: backs off when nothing changes, resets on change.
+  Duration _pollInterval = const Duration(seconds: 1);
+  static const _pollIntervalMin = Duration(seconds: 1);
+  static const _pollIntervalMax = Duration(seconds: 5);
+  int _lastKnownFileCount = 0;
+  String? _lastNewestPath;
+
   @override
   void initState() {
     super.initState();
@@ -148,9 +155,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_sharedDirPath != null) {
       _loadSnapshots();
-      // Poll for new frames from the background Swift extension
-      _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) => _loadSnapshots());
+      _schedulePoll();
     }
+  }
+
+  /// Schedules the next poll using a one-shot timer so the interval can adapt.
+  /// The delay is measured from the *end* of each poll, which naturally prevents
+  /// overlapping polls if a directory listing takes longer than the interval.
+  void _schedulePoll() {
+    _pollingTimer = Timer(_pollInterval, () async {
+      await _loadSnapshots();
+      if (mounted) _schedulePoll();
+    });
   }
 
   Future<void> _loadSnapshots() async {
@@ -159,18 +175,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       if (!await dir.exists()) return;
 
-      // Collect all File entries without blocking the UI thread.
       final files = await dir
           .list()
-          .whereType<File>()
+          .where((e) => e is File)
+          .cast<File>()
           .toList();
 
       if (!mounted) return;
 
-      // Sort newest-first by filename.  Because files are named
-      // snapshot_YYYYMMDD_HHMMSS_SSS.heic the lexicographic order equals the
-      // chronological order, so no stat() call is needed.
+      // O(n) scan to find the newest filename — much cheaper than an
+      // O(n log n) sort that we can skip entirely when nothing changed.
+      final newestPath = files.isNotEmpty
+          ? files.reduce((a, b) => a.path.compareTo(b.path) > 0 ? a : b).path
+          : null;
+
+      if (files.length == _lastKnownFileCount && newestPath == _lastNewestPath) {
+        // Nothing changed — exponentially back off the polling interval
+        // (1 s → 2 s → 4 s → 5 s cap) to reduce idle I/O churn.
+        _pollInterval = Duration(
+          milliseconds: (_pollInterval.inMilliseconds * 2).clamp(
+            _pollIntervalMin.inMilliseconds,
+            _pollIntervalMax.inMilliseconds,
+          ),
+        );
+        return;
+      }
+
+      // Change detected — sort newest-first and refresh the UI.
       files.sort((a, b) => b.path.compareTo(a.path));
+      _lastKnownFileCount = files.length;
+      _lastNewestPath = newestPath;
+      _pollInterval = _pollIntervalMin;
 
       setState(() {
         _snapshots = files;
