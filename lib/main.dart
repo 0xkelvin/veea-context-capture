@@ -103,6 +103,19 @@ class BridgeService {
       debugPrint("Bridge setCaptureWantsActive Error: $e");
     }
   }
+
+  /// Whether the broadcast extension is currently running.
+  /// This can differ from [getCaptureWantsActive] after a screen lock: the
+  /// user still *wants* capture active but the extension was killed by iOS.
+  static Future<bool> getCaptureIsRunning() async {
+    try {
+      final res = await _channel.invokeMethod('getSetting', {'key': 'capture_is_running'});
+      return res as bool? ?? false;
+    } catch (e) {
+      debugPrint("Bridge getCaptureIsRunning Error: $e");
+      return false;
+    }
+  }
 }
 
 class VeeaContextApp extends StatelessWidget {
@@ -153,6 +166,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   /// Whether the user has asked capture to stay active (controls auto-restart).
   bool _captureWantsActive = false;
 
+  /// Whether the broadcast extension is currently running.
+  /// Can differ from [_captureWantsActive] when recording was paused by a
+  /// screen lock (wantsActive=true, isRunning=false → "Resume Capture" state).
+  bool _captureIsRunning = false;
+
   // Adaptive polling: backs off when nothing changes, resets on change.
   Duration _pollInterval = const Duration(seconds: 1);
   static const _pollIntervalMin = Duration(seconds: 1);
@@ -185,7 +203,11 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _refreshCaptureState() async {
     final wantsActive = await BridgeService.getCaptureWantsActive();
-    if (mounted) setState(() => _captureWantsActive = wantsActive);
+    final isRunning = await BridgeService.getCaptureIsRunning();
+    if (mounted) setState(() {
+      _captureWantsActive = wantsActive;
+      _captureIsRunning = isRunning;
+    });
   }
 
   Future<void> _initBridge() async {
@@ -194,6 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     final maxF = await BridgeService.getMaxFrames();
     final sensitivity = await BridgeService.getSensitivity();
     final wantsActive = await BridgeService.getCaptureWantsActive();
+    final isRunning = await BridgeService.getCaptureIsRunning();
     if (!mounted) return;
     setState(() {
       _sharedDirPath = path;
@@ -201,6 +224,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _maxFrames = maxF;
       _sensitivityPct = (sensitivity * 100).roundToDouble().clamp(1, 20);
       _captureWantsActive = wantsActive;
+      _captureIsRunning = isRunning;
     });
 
     if (_sharedDirPath != null) {
@@ -590,17 +614,47 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildCaptureLauncher({bool mini = false}) {
-    final isActive = _captureWantsActive;
+    final wantsActive = _captureWantsActive;
+    final isRunning   = _captureIsRunning;
+
+    // Derive the three distinct UI states:
+    //   • running  – wantsActive=true,  isRunning=true  → "Stop Capture"
+    //   • paused   – wantsActive=true,  isRunning=false → "Resume Capture"
+    //     (extension was killed by a screen lock)
+    //   • stopped  – wantsActive=false                  → "Tap to Record"
+    final String label;
+    final Color  iconColor;
+    final IconData icon;
+    if (wantsActive && isRunning) {
+      label     = "Stop Capture";
+      iconColor = Colors.orangeAccent;
+      icon      = Icons.stop_circle_outlined;
+    } else if (wantsActive && !isRunning) {
+      label     = "Resume Capture";
+      iconColor = Colors.blueAccent;
+      icon      = Icons.play_circle_outline;
+    } else {
+      label     = "Tap to Record";
+      iconColor = Colors.redAccent;
+      icon      = Icons.radio_button_checked;
+    }
 
     return InkWell(
       onTap: () async {
-        if (isActive) {
-          // User wants to stop auto-restart; the broadcast itself keeps running
-          // until stopped via iOS Control Centre / status bar.
+        if (wantsActive && isRunning) {
+          // Stop: cancel the auto-restart intent.
+          // The broadcast itself keeps running until stopped via iOS Control
+          // Centre / status bar.
           await BridgeService.setCaptureWantsActive(false);
-          if (mounted) setState(() => _captureWantsActive = false);
+          if (mounted) setState(() {
+            _captureWantsActive = false;
+            _captureIsRunning = false;
+          });
+        } else if (wantsActive && !isRunning) {
+          // Paused after a screen lock – re-trigger the broadcast picker.
+          await BridgeService.launchCapture();
         } else {
-          // Start capture and enable auto-restart on screen unlock.
+          // Start fresh: persist intent then show the broadcast picker.
           await BridgeService.setCaptureWantsActive(true);
           if (mounted) setState(() => _captureWantsActive = true);
           await BridgeService.launchCapture();
@@ -620,15 +674,12 @@ class _DashboardScreenState extends State<DashboardScreen>
           children: [
             if (!mini) ...[
               Text(
-                isActive ? "Stop Capture" : "Tap to Record",
+                label,
                 style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
               ),
               const SizedBox(width: 8),
             ],
-            Icon(
-              isActive ? Icons.stop_circle_outlined : Icons.radio_button_checked,
-              color: isActive ? Colors.orangeAccent : Colors.redAccent,
-            ),
+            Icon(icon, color: iconColor),
           ],
         ),
       ),
