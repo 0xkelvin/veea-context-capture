@@ -1,11 +1,15 @@
 import ReplayKit
 import CoreImage
 import UniformTypeIdentifiers
+import UserNotifications
 
 class SampleHandler: RPBroadcastSampleHandler {
 
     private let appGroupID = "group.ai.bluleap.veea"
     private let snapshotsFolder = "snapshots"
+
+    // Notification identifier — must match AppDelegate.captureRestartNotificationID.
+    private let captureRestartNotificationID = "ai.bluleap.veea.capture-restart"
     
     // Memory-efficient rendering pipeline
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
@@ -125,6 +129,10 @@ class SampleHandler: RPBroadcastSampleHandler {
         defaults?.set(true, forKey: "capture_is_running")
         defaults?.synchronize()
 
+        // Cancel any pending "Recording paused" notification now that the
+        // broadcast has (re-)started.
+        cancelRestartNotification()
+
         // Setup initial folder
         if let sharedFolder = getSnapshotsFolder() {
             if !FileManager.default.fileExists(atPath: sharedFolder.path) {
@@ -144,6 +152,45 @@ class SampleHandler: RPBroadcastSampleHandler {
         let defaults = UserDefaults(suiteName: appGroupID)
         defaults?.set(false, forKey: "capture_is_running")
         defaults?.synchronize()
+
+        // If the user still wants capture active (i.e. this was an involuntary
+        // stop caused by a screen lock), schedule a local notification so the
+        // user gets a tap-to-return prompt when the main app is not in the
+        // foreground.  The main app suppresses the notification banner when it
+        // is already in the foreground (UNUserNotificationCenterDelegate), so
+        // this notification is only visible in the background scenario.
+        let wantsActive = defaults?.bool(forKey: "capture_wants_active") ?? false
+        if wantsActive {
+            scheduleRestartNotification()
+        }
+    }
+
+    // MARK: - Notification helpers
+
+    /// Schedules a local notification that nudges the user back to the app to
+    /// resume recording.  A 2-second delay gives the main app time to handle
+    /// the restart itself (via `applicationDidBecomeActive` + banner) if it is
+    /// already in the foreground.
+    private func scheduleRestartNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "Recording paused"
+        content.body = "Tap to resume screen capture."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2.0, repeats: false)
+        let request  = UNNotificationRequest(
+            identifier: captureRestartNotificationID,
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+
+    /// Cancels any pending or delivered restart notification.
+    private func cancelRestartNotification() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [captureRestartNotificationID])
+        center.removeDeliveredNotifications(withIdentifiers: [captureRestartNotificationID])
     }
     
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {

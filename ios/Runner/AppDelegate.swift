@@ -1,11 +1,15 @@
 import Flutter
 import UIKit
 import ReplayKit
+import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
 
   private let appGroupID = "group.ai.bluleap.veea"
+
+  // Shared notification identifier — must match the value used in SampleHandler.swift.
+  private let captureRestartNotificationID = "ai.bluleap.veea.capture-restart"
 
   // MARK: - Background-entry tracking
 
@@ -31,13 +35,22 @@ import ReplayKit
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     
+    // Register as the UNUserNotificationCenter delegate and request permission
+    // so the CaptureEngine extension can post "Recording paused" notifications
+    // when the broadcast is killed while the main app is in the background
+    // (e.g. the screen locked while the user had navigated away from the app).
+    UNUserNotificationCenter.current().delegate = self
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
     let bridgeChannel = FlutterMethodChannel(name: "ai.bluleap.veea/bridge",
                                               binaryMessenger: controller.binaryMessenger)
     
     bridgeChannel.setMethodCallHandler({
       [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
-      guard let self = self else { return }
+      guard let self = self else {
+        result(FlutterError(code: "UNAVAILABLE", message: "AppDelegate deallocated", details: nil))
+        return
+      }
       if call.method == "getSharedDir" {
         let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.appGroupID)
         guard let path = container?.appendingPathComponent("snapshots").path else {
@@ -99,6 +112,43 @@ import ReplayKit
     dismissRestartBanner(animated: false)
   }
 
+  // MARK: - UNUserNotificationCenterDelegate
+
+  /// Called when the user taps the "Recording paused" notification while the
+  /// app is in the background.  The tap brings the app to the foreground and
+  /// `applicationDidBecomeActive` fires, but we also show the restart banner
+  /// here directly in case the lifecycle callback fires before this delegate
+  /// method resolves.
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               didReceive response: UNNotificationResponse,
+                               withCompletionHandler completionHandler: @escaping () -> Void) {
+    if response.notification.request.identifier == captureRestartNotificationID {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        self?.showRestartBanner()
+      }
+    }
+    completionHandler()
+  }
+
+  /// When the app is already in the foreground the banner is already visible
+  /// (or about to be shown), so we suppress the notification alert entirely.
+  func userNotificationCenter(_ center: UNUserNotificationCenter,
+                               willPresent notification: UNNotification,
+                               withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+    completionHandler([])
+  }
+
+  // MARK: - Notification helper
+
+  /// Cancels any pending or delivered "Recording paused" notification so it
+  /// does not appear after the user has already acted (banner visible / recording
+  /// started / intent cancelled).
+  private func cancelRestartNotification() {
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: [captureRestartNotificationID])
+    center.removeDeliveredNotifications(withIdentifiers: [captureRestartNotificationID])
+  }
+
   // MARK: - Auto-restart on screen unlock
 
   /// Checks whether capture needs to be restarted after a screen lock and,
@@ -145,6 +195,10 @@ import ReplayKit
   /// a system-level "Start Broadcast" prompt.
   private func showRestartBanner() {
     guard restartBannerView == nil, let window = self.window else { return }
+
+    // The in-app banner is now showing — cancel any pending notification so it
+    // does not appear on top of the banner while the user is already looking at it.
+    cancelRestartNotification()
 
     let banner = UIView()
     banner.backgroundColor = UIColor(white: 0.10, alpha: 0.94)
@@ -215,6 +269,12 @@ import ReplayKit
   @objc private func dismissRestartBannerTapped() {
     restartCheckTimer?.invalidate()
     restartCheckTimer = nil
+    // User explicitly chose not to restart — cancel the intent so the banner
+    // does not re-appear on subsequent foreground events or notification taps.
+    let defaults = UserDefaults(suiteName: appGroupID)
+    defaults?.set(false, forKey: "capture_wants_active")
+    defaults?.synchronize()
+    cancelRestartNotification()
     dismissRestartBanner(animated: true)
   }
 
@@ -245,6 +305,8 @@ import ReplayKit
       if isRunning || !wantsActive {
         self.restartCheckTimer?.invalidate()
         self.restartCheckTimer = nil
+        // Recording restarted (or intent cancelled) — cancel any pending notification.
+        self.cancelRestartNotification()
         DispatchQueue.main.async { self.dismissRestartBanner(animated: true) }
       }
     }

@@ -644,11 +644,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         if (wantsActive && isRunning) {
           // Stop: cancel the auto-restart intent.
           // The broadcast itself keeps running until stopped via iOS Control
-          // Centre / status bar.
+          // Centre / status bar, so _captureIsRunning stays true.
           await BridgeService.setCaptureWantsActive(false);
           if (mounted) setState(() {
             _captureWantsActive = false;
-            _captureIsRunning = false;
           });
         } else if (wantsActive && !isRunning) {
           // Paused after a screen lock – re-trigger the broadcast picker.
