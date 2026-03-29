@@ -4,7 +4,7 @@ import ReplayKit
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
 
   private let appGroupID = "group.ai.bluleap.veea"
 
@@ -119,7 +119,7 @@ import UserNotifications
   /// `applicationDidBecomeActive` fires, but we also show the restart banner
   /// here directly in case the lifecycle callback fires before this delegate
   /// method resolves.
-  func userNotificationCenter(_ center: UNUserNotificationCenter,
+  override func userNotificationCenter(_ center: UNUserNotificationCenter,
                                didReceive response: UNNotificationResponse,
                                withCompletionHandler completionHandler: @escaping () -> Void) {
     if response.notification.request.identifier == captureRestartNotificationID {
@@ -132,7 +132,7 @@ import UserNotifications
 
   /// When the app is already in the foreground the banner is already visible
   /// (or about to be shown), so we suppress the notification alert entirely.
-  func userNotificationCenter(_ center: UNUserNotificationCenter,
+  override func userNotificationCenter(_ center: UNUserNotificationCenter,
                                willPresent notification: UNNotification,
                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
     completionHandler([])
