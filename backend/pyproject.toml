@@ -1,0 +1,18 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"  # Đổi xuống 3.11
+dependencies = [
+    "accelerate>=1.13.0",
+    "av>=17.0.0",
+    "opencv-python>=4.2.0.34",
+    "qwen-vl-utils>=0.0.14",
+    "torch>=2.6.0,<2.11.0",
+    "torchvision>=0.21.0,<0.26.0",  # Giữ version còn read_video
+    "transformers",
+]
+
+[tool.uv.sources]
+transformers = { git = "https://github.com/huggingface/transformers" }
