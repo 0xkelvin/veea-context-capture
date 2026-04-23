@@ -1,3 +1,15 @@
+# POC 
+
+<img width="309" height="668" alt="image" src="https://github.com/user-attachments/assets/c1cab894-1416-4a56-a89c-b39c0b030409" />
+
+<img width="308" height="672" alt="image" src="https://github.com/user-attachments/assets/b10a91cb-6d5d-4247-b414-944502acb760" />
+
+<img width="308" height="669" alt="image" src="https://github.com/user-attachments/assets/c8f10446-e663-4f0f-8eee-b3dca03ad8cc" />
+
+
+
+
+
 # veea-context-capture
 
 # Veea iOS Context Capture (Vision Bridge)
